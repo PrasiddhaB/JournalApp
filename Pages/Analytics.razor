@@ -1,0 +1,293 @@
+@page "/analytics"
+@using JournalApp.Models
+@using JournalApp.Services
+@inject AnalyticsService AnalyticsService
+
+<div class="page analytics-page">
+    <header class="page-header">
+        <h1>Analytics</h1>
+        <p class="page-subtitle">Insights into your journaling journey</p>
+    </header>
+    
+    <!-- Date Range Filter -->
+    <div class="date-filter">
+        <div class="filter-group">
+            <label>From:</label>
+            <input type="date" 
+                   value="@_startDate?.ToString("yyyy-MM-dd")" 
+                   @onchange="HandleStartDateChange" />
+        </div>
+        <div class="filter-group">
+            <label>To:</label>
+            <input type="date" 
+                   value="@_endDate?.ToString("yyyy-MM-dd")" 
+                   @onchange="HandleEndDateChange" />
+        </div>
+        <div class="filter-actions">
+            <button class="btn btn-secondary btn-sm" @onclick="() => SetDateRange(7)">7 Days</button>
+            <button class="btn btn-secondary btn-sm" @onclick="() => SetDateRange(30)">30 Days</button>
+            <button class="btn btn-secondary btn-sm" @onclick="() => SetDateRange(90)">90 Days</button>
+            <button class="btn btn-secondary btn-sm" @onclick="() => SetDateRange(365)">1 Year</button>
+            <button class="btn btn-secondary btn-sm" @onclick="ClearDateRange">All Time</button>
+        </div>
+    </div>
+    
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <p>Calculating analytics...</p>
+        </div>
+    }
+    else if (_analytics.TotalEntries == 0)
+    {
+        <div class="empty-state">
+            <p>No entries found in the selected date range.</p>
+            <p>Start journaling to see your analytics!</p>
+        </div>
+    }
+    else
+    {
+        <!-- Summary Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-content">
+                    <span class="stat-value">@_analytics.TotalEntries</span>
+                    <span class="stat-label">Total Entries</span>
+                </div>
+            </div>
+            <div class="stat-card streak-card">
+                <div class="stat-content">
+                    <span class="stat-value">@_analytics.CurrentStreak</span>
+                    <span class="stat-label">Current Streak</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-content">
+                    <span class="stat-value">@_analytics.LongestStreak</span>
+                    <span class="stat-label">Longest Streak</span>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-content">
+                    <span class="stat-value">@_analytics.AverageWordCount.ToString("F0")</span>
+                    <span class="stat-label">Avg. Words</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="analytics-grid">
+            <!-- Mood Distribution -->
+            <div class="analytics-card">
+                <h3>Mood Distribution</h3>
+                <div class="mood-chart">
+                    <div class="mood-bar">
+                        <div class="bar-segment positive" style="width: @_analytics.PositiveMoodPercentage%">
+                            @if (_analytics.PositiveMoodPercentage >= 10)
+                            {
+                                <span>@_analytics.PositiveMoodPercentage%</span>
+                            }
+                        </div>
+                        <div class="bar-segment neutral" style="width: @_analytics.NeutralMoodPercentage%">
+                            @if (_analytics.NeutralMoodPercentage >= 10)
+                            {
+                                <span>@_analytics.NeutralMoodPercentage%</span>
+                            }
+                        </div>
+                        <div class="bar-segment negative" style="width: @_analytics.NegativeMoodPercentage%">
+                            @if (_analytics.NegativeMoodPercentage >= 10)
+                            {
+                                <span>@_analytics.NegativeMoodPercentage%</span>
+                            }
+                        </div>
+                    </div>
+                    <div class="mood-legend">
+                        <span class="legend-item positive">
+                            <span class="legend-dot"></span> Positive (@_analytics.PositiveMoodCount)
+                        </span>
+                        <span class="legend-item neutral">
+                            <span class="legend-dot"></span> Neutral (@_analytics.NeutralMoodCount)
+                        </span>
+                        <span class="legend-item negative">
+                            <span class="legend-dot"></span> Negative (@_analytics.NegativeMoodCount)
+                        </span>
+                    </div>
+                </div>
+                
+                @if (!string.IsNullOrEmpty(_analytics.MostFrequentMood))
+                {
+                    <div class="most-frequent">
+                        <strong>Most Frequent:</strong> @_analytics.MostFrequentMood (@_analytics.MostFrequentMoodCount times)
+                    </div>
+                }
+            </div>
+            
+            <!-- Most Used Tags -->
+            <div class="analytics-card">
+                <h3>Most Used Tags</h3>
+                @if (_analytics.MostUsedTags.Any())
+                {
+                    <div class="tag-chart">
+                        @foreach (var tag in _analytics.MostUsedTags.Take(8))
+                        {
+                            <div class="tag-bar-item">
+                                <span class="tag-name">@tag.TagName</span>
+                                <div class="tag-bar-container">
+                                    <div class="tag-bar-fill" style="width: @(tag.Count * 100 / Math.Max(_analytics.MostUsedTags.Max(t => t.Count), 1))%"></div>
+                                </div>
+                                <span class="tag-count">@tag.Count</span>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="no-data">No tags used yet</p>
+                }
+            </div>
+            
+            <!-- Word Count Trends -->
+            <div class="analytics-card wide">
+                <h3>Word Count Trends</h3>
+                @if (_analytics.WordCountTrends.Any())
+                {
+                    <div class="word-trend-chart">
+                        @{
+                            var maxWords = _analytics.WordCountTrends.Max(t => t.WordCount);
+                            maxWords = Math.Max(maxWords, 100);
+                        }
+                        <div class="trend-bars">
+                            @foreach (var trend in _analytics.WordCountTrends.TakeLast(30))
+                            {
+                                var height = maxWords > 0 ? (trend.WordCount * 100 / maxWords) : 0;
+                                <div class="trend-bar" 
+                                     style="height: @height%"
+                                     title="@trend.Date.ToString("MMM d"): @trend.WordCount words">
+                                </div>
+                            }
+                        </div>
+                        <div class="trend-labels">
+                            @if (_analytics.WordCountTrends.Count > 0)
+                            {
+                                <span>@_analytics.WordCountTrends.First().Date.ToString("MMM d")</span>
+                                <span>@_analytics.WordCountTrends.Last().Date.ToString("MMM d")</span>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <p class="no-data">Not enough data for trends</p>
+                }
+            </div>
+            
+            <!-- Missed Days -->
+            <div class="analytics-card">
+                <h3>Missed Days</h3>
+                <div class="missed-days-info">
+                    <div class="missed-count">
+                        <span class="count">@_analytics.MissedDays.Count</span>
+                        <span class="label">days missed</span>
+                    </div>
+                    
+                    @if (_analytics.MissedDays.Any())
+                    {
+                        <div class="missed-list">
+                            <h4>Recent missed days:</h4>
+                            <ul>
+                                @foreach (var date in _analytics.MissedDays.TakeLast(5).Reverse())
+                                {
+                                    <li>@date.ToString("ddd, MMM d")</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="perfect-streak">Perfect attendance!</p>
+                    }
+                </div>
+            </div>
+            
+            <!-- Tag Breakdown -->
+            <div class="analytics-card">
+                <h3>Tag Breakdown</h3>
+                @if (_analytics.TagBreakdown.Any())
+                {
+                    <div class="tag-breakdown">
+                        @foreach (var tag in _analytics.TagBreakdown.Take(10))
+                        {
+                            <div class="breakdown-item">
+                                <span class="tag-name">@tag.TagName</span>
+                                <span class="tag-percent">@tag.Percentage% of entries</span>
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="no-data">No tags to analyze</p>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private AnalyticsData _analytics = new();
+    private DateOnly? _startDate;
+    private DateOnly? _endDate;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        SetDateRange(30);
+        await LoadAnalytics();
+    }
+    
+    private async Task LoadAnalytics()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            _analytics = await AnalyticsService.GetAnalyticsAsync(_startDate, _endDate);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+    
+    private void SetDateRange(int days)
+    {
+        _endDate = DateOnly.FromDateTime(DateTime.Today);
+        _startDate = _endDate.Value.AddDays(-days);
+    }
+    
+    private async Task ClearDateRange()
+    {
+        _startDate = null;
+        _endDate = null;
+        await LoadAnalytics();
+    }
+    
+    private async Task HandleStartDateChange(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var date))
+        {
+            _startDate = date;
+            await LoadAnalytics();
+        }
+    }
+    
+    private async Task HandleEndDateChange(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var date))
+        {
+            _endDate = date;
+            await LoadAnalytics();
+        }
+    }
+}

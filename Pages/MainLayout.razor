@@ -1,0 +1,124 @@
+@inherits LayoutComponentBase
+@inject JournalApp.Services.ThemeService ThemeService
+@inject JournalApp.Services.AuthService AuthService
+@inject NavigationManager Navigation
+
+<div class="app-container @ThemeService.GetThemeClass()">
+    @if (_isLocked)
+    {
+        <JournalApp.Pages.Lock OnUnlocked="HandleUnlocked" />
+    }
+    else
+    {
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h1 class="app-title">Journal</h1>
+            </div>
+            
+            <ul class="nav-menu">
+                <li class="nav-item">
+                    <a href="/" class="nav-link @GetActiveClass("/")">
+                        <span class="nav-text">Home</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/today" class="nav-link @GetActiveClass("/today")">
+                        <span class="nav-text">Today</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/calendar" class="nav-link @GetActiveClass("/calendar")">
+                        <span class="nav-text">Calendar</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/timeline" class="nav-link @GetActiveClass("/timeline")">
+                        <span class="nav-text">Timeline</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/analytics" class="nav-link @GetActiveClass("/analytics")">
+                        <span class="nav-text">Analytics</span>
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="/settings" class="nav-link @GetActiveClass("/settings")">
+                        <span class="nav-text">Settings</span>
+                    </a>
+                </li>
+            </ul>
+            
+            <div class="sidebar-footer">
+                <button class="theme-toggle" @onclick="ToggleTheme">
+                    @(ThemeService.IsDarkMode ? "Light Mode" : "Dark Mode")
+                </button>
+                
+                @if (_hasPassword)
+                {
+                    <button class="lock-btn" @onclick="LockApp">
+                        Lock
+                    </button>
+                }
+            </div>
+        </nav>
+        
+        <main class="main-content">
+            @Body
+        </main>
+    }
+</div>
+
+@code {
+    private bool _isLocked = true;
+    private bool _hasPassword = false;
+    
+    protected override async Task OnInitializedAsync()
+    {
+        ThemeService.OnThemeChanged += OnThemeChanged;
+        _hasPassword = await AuthService.IsPasswordEnabledAsync();
+        _isLocked = !await AuthService.IsSessionValidAsync();
+        await ThemeService.InitializeAsync();
+    }
+    
+    private void OnThemeChanged(string theme)
+    {
+        InvokeAsync(StateHasChanged);
+    }
+    
+    private async Task ToggleTheme()
+    {
+        await ThemeService.ToggleThemeAsync();
+    }
+    
+    private void LockApp()
+    {
+        AuthService.Lock();
+        _isLocked = true;
+        StateHasChanged();
+    }
+    
+    private async Task HandleUnlocked()
+    {
+        _isLocked = false;
+        _hasPassword = await AuthService.IsPasswordEnabledAsync();
+        StateHasChanged();
+    }
+    
+    private string GetActiveClass(string path)
+    {
+        var currentPath = Navigation.ToBaseRelativePath(Navigation.Uri);
+        currentPath = "/" + currentPath;
+        
+        if (path == "/" && currentPath == "/")
+            return "active";
+        if (path != "/" && currentPath.StartsWith(path))
+            return "active";
+        
+        return "";
+    }
+    
+    public void Dispose()
+    {
+        ThemeService.OnThemeChanged -= OnThemeChanged;
+    }
+}

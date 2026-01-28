@@ -1,0 +1,144 @@
+@namespace JournalApp.Components
+@using JournalApp.Models
+
+<div class="mood-picker">
+    <!-- Primary Mood (Required) -->
+    <div class="mood-section">
+        <label class="mood-label">Primary Mood <span class="required">*</span></label>
+        <div class="mood-categories">
+            @foreach (var category in Enum.GetValues<MoodCategory>())
+            {
+                <div class="mood-category @category.ToString().ToLower()">
+                    <span class="category-label">@category</span>
+                    <div class="mood-options">
+                        @foreach (var mood in GetMoodsByCategory(category))
+                        {
+                            <button type="button"
+                                    class="mood-option @(mood.Id == PrimaryMoodId ? "selected" : "")"
+                                    @onclick="() => SelectPrimaryMood(mood.Id)"
+                                    title="@mood.Name">
+                                <span class="mood-emoji">@mood.Emoji</span>
+                                <span class="mood-name">@mood.Name</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+    
+    <!-- Secondary Moods (Optional) -->
+    <div class="mood-section secondary">
+        <label class="mood-label">Secondary Moods <span class="optional">(up to 2)</span></label>
+        <div class="secondary-mood-select">
+            @if (_availableSecondaryMoods.Any())
+            {
+                <div class="mood-chips">
+                    @foreach (var mood in _availableSecondaryMoods)
+                    {
+                        var isSelected = mood.Id == SecondaryMood1Id || mood.Id == SecondaryMood2Id;
+                        var canSelect = !isSelected && (SecondaryMood1Id == null || SecondaryMood2Id == null);
+                        
+                        <button type="button"
+                                class="mood-chip @(isSelected ? "selected" : "") @(canSelect ? "" : "disabled")"
+                                @onclick="() => ToggleSecondaryMood(mood.Id)"
+                                disabled="@(!isSelected && !canSelect)">
+                            @mood.Emoji @mood.Name
+                            @if (isSelected)
+                            {
+                                <span class="remove-btn">×</span>
+                            }
+                        </button>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="hint">Select a primary mood first</p>
+            }
+        </div>
+        
+        @if (SecondaryMood1Id != null || SecondaryMood2Id != null)
+        {
+            <div class="selected-secondary">
+                <span>Selected: </span>
+                @if (SecondaryMood1Id != null)
+                {
+                    var mood1 = Moods.FirstOrDefault(m => m.Id == SecondaryMood1Id);
+                    <span class="selected-mood">@mood1?.Emoji @mood1?.Name</span>
+                }
+                @if (SecondaryMood2Id != null)
+                {
+                    var mood2 = Moods.FirstOrDefault(m => m.Id == SecondaryMood2Id);
+                    <span class="selected-mood">@mood2?.Emoji @mood2?.Name</span>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<Mood> Moods { get; set; } = new();
+    
+    [Parameter]
+    public int PrimaryMoodId { get; set; }
+    
+    [Parameter]
+    public int? SecondaryMood1Id { get; set; }
+    
+    [Parameter]
+    public int? SecondaryMood2Id { get; set; }
+    
+    [Parameter]
+    public EventCallback<(int primary, int? secondary1, int? secondary2)> OnMoodsChanged { get; set; }
+    
+    private List<Mood> _availableSecondaryMoods => Moods.Where(m => m.Id != PrimaryMoodId).ToList();
+    
+    private IEnumerable<Mood> GetMoodsByCategory(MoodCategory category)
+    {
+        return Moods.Where(m => m.Category == category).OrderBy(m => m.DisplayOrder);
+    }
+    
+    private async Task SelectPrimaryMood(int moodId)
+    {
+        // If selecting a mood that was secondary, remove it from secondary
+        if (SecondaryMood1Id == moodId)
+            SecondaryMood1Id = null;
+        if (SecondaryMood2Id == moodId)
+            SecondaryMood2Id = null;
+        
+        PrimaryMoodId = moodId;
+        await NotifyChange();
+    }
+    
+    private async Task ToggleSecondaryMood(int moodId)
+    {
+        // If already selected, deselect
+        if (SecondaryMood1Id == moodId)
+        {
+            SecondaryMood1Id = SecondaryMood2Id;
+            SecondaryMood2Id = null;
+        }
+        else if (SecondaryMood2Id == moodId)
+        {
+            SecondaryMood2Id = null;
+        }
+        // Otherwise, add if space available
+        else if (SecondaryMood1Id == null)
+        {
+            SecondaryMood1Id = moodId;
+        }
+        else if (SecondaryMood2Id == null)
+        {
+            SecondaryMood2Id = moodId;
+        }
+        
+        await NotifyChange();
+    }
+    
+    private async Task NotifyChange()
+    {
+        await OnMoodsChanged.InvokeAsync((PrimaryMoodId, SecondaryMood1Id, SecondaryMood2Id));
+    }
+}

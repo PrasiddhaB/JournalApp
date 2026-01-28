@@ -1,0 +1,90 @@
+@using JournalApp.Services
+@inject AuthService AuthService
+
+<div class="lock-screen">
+    <div class="lock-card">
+        <h2>Personal Journal</h2>
+        <p class="lock-subtitle">Enter your PIN to unlock</p>
+        
+        <div class="pin-input-container">
+            <input type="password" 
+                   @bind="_pin" 
+                   @bind:event="oninput"
+                   @onkeypress="HandleKeyPress"
+                   placeholder="Enter PIN"
+                   maxlength="20"
+                   class="pin-input @(_hasError ? "error" : "")" />
+        </div>
+        
+        @if (_hasError)
+        {
+            <p class="error-message">@_errorMessage</p>
+        }
+        
+        <button class="unlock-btn btn btn-primary" @onclick="Unlock" disabled="@_isLoading">
+            @if (_isLoading)
+            {
+                <span>Unlocking...</span>
+            }
+            else
+            {
+                <span>Unlock</span>
+            }
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public EventCallback OnUnlocked { get; set; }
+    
+    private string _pin = "";
+    private bool _hasError = false;
+    private string _errorMessage = "";
+    private bool _isLoading = false;
+    
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await Unlock();
+        }
+    }
+    
+    private async Task Unlock()
+    {
+        _hasError = false;
+        _errorMessage = "";
+        
+        if (string.IsNullOrWhiteSpace(_pin))
+        {
+            _hasError = true;
+            _errorMessage = "Please enter your PIN";
+            return;
+        }
+        
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var success = await AuthService.AuthenticateAsync(_pin);
+            
+            if (success)
+            {
+                await OnUnlocked.InvokeAsync();
+            }
+            else
+            {
+                _hasError = true;
+                _errorMessage = "Incorrect PIN. Please try again.";
+                _pin = "";
+            }
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+}

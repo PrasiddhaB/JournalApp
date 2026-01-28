@@ -1,0 +1,78 @@
+@namespace JournalApp.Components
+@using JournalApp.Models
+
+<div class="entry-card" @onclick="HandleClick">
+    <div class="entry-date-badge">
+        <span class="day">@Entry.EntryDate.Day</span>
+        <span class="month">@Entry.EntryDate.ToString("MMM")</span>
+        <span class="year">@Entry.EntryDate.Year</span>
+    </div>
+    
+    <div class="entry-main">
+        <div class="entry-header">
+            <h3 class="entry-title">@Entry.Title</h3>
+            @if (Entry.PrimaryMood != null)
+            {
+                <span class="mood-indicator @Entry.PrimaryMood.Category.ToString().ToLower()" 
+                      title="@Entry.PrimaryMood.Name">
+                    @Entry.PrimaryMood.Emoji
+                </span>
+            }
+        </div>
+        
+        <p class="entry-excerpt">@GetExcerpt(Entry.Content)</p>
+        
+        <div class="entry-footer">
+            <div class="entry-tags">
+                @foreach (var et in Entry.EntryTags.Take(4))
+                {
+                    <span class="tag-badge" style="background-color: @(et.Tag?.Color ?? "#6B7280")20">
+                        @et.Tag?.Name
+                    </span>
+                }
+                @if (Entry.EntryTags.Count > 4)
+                {
+                    <span class="tag-badge more">+@(Entry.EntryTags.Count - 4)</span>
+                }
+            </div>
+            
+            <div class="entry-meta">
+                <span class="word-count">@Entry.WordCount words</span>
+                @if (!string.IsNullOrEmpty(Entry.Category))
+                {
+                    <span class="separator">•</span>
+                    <span class="category">@Entry.Category</span>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public JournalEntry Entry { get; set; } = null!;
+    
+    [Parameter]
+    public EventCallback OnClick { get; set; }
+    
+    private async Task HandleClick()
+    {
+        await OnClick.InvokeAsync();
+    }
+    
+    private string GetExcerpt(string content, int maxLength = 120)
+    {
+        if (string.IsNullOrEmpty(content)) return "";
+        
+        // Remove markdown formatting for preview
+        var plain = content
+            .Replace("**", "")
+            .Replace("*", "")
+            .Replace("#", "")
+            .Replace(">", "")
+            .Replace("-", "");
+        
+        if (plain.Length <= maxLength) return plain;
+        return plain.Substring(0, maxLength).TrimEnd() + "...";
+    }
+}

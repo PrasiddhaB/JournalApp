@@ -1,0 +1,188 @@
+@page "/timeline"
+@using JournalApp.Models
+@using JournalApp.Repositories
+@using JournalApp.Components
+@inject IJournalRepository Repository
+@inject NavigationManager Navigation
+
+<div class="page timeline-page">
+    <header class="page-header">
+        <h1>Timeline</h1>
+        <p class="page-subtitle">Browse all your journal entries</p>
+    </header>
+    
+    <!-- Filter Bar -->
+    <JournalApp.Components.FilterBar 
+        Moods="_moods"
+        Tags="_tags"
+        Categories="_categories"
+        Filter="_filter"
+        OnFilterChanged="HandleFilterChanged" />
+    
+    <!-- Results Info -->
+    <div class="results-info">
+        <span>@_pagedResult.TotalCount entries found</span>
+        @if (HasActiveFilters())
+        {
+            <button class="btn btn-link" @onclick="ClearFilters">Clear Filters</button>
+        }
+    </div>
+    
+    <!-- Entries List -->
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <p>Loading entries...</p>
+        </div>
+    }
+    else if (!_pagedResult.Items.Any())
+    {
+        <div class="empty-state">
+            <p>No entries found matching your criteria.</p>
+            @if (HasActiveFilters())
+            {
+                <button class="btn btn-secondary" @onclick="ClearFilters">Clear Filters</button>
+            }
+            else
+            {
+                <button class="btn btn-primary" @onclick="GoToToday">Write Your First Entry</button>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="entries-timeline">
+            @{
+                string? currentMonth = null;
+            }
+            
+            @foreach (var entry in _pagedResult.Items)
+            {
+                var entryMonth = entry.EntryDate.ToString("MMMM yyyy");
+                
+                @if (currentMonth != entryMonth)
+                {
+                    currentMonth = entryMonth;
+                    <div class="month-divider">
+                        <span>@entryMonth</span>
+                    </div>
+                }
+                
+                <JournalApp.Components.EntryCard 
+                    Entry="entry"
+                    OnClick="() => ViewEntry(entry)" />
+            }
+        </div>
+        
+        <!-- Pagination -->
+        @if (_pagedResult.TotalPages > 1)
+        {
+            <div class="pagination">
+                <button class="btn btn-secondary" 
+                        @onclick="PreviousPage" 
+                        disabled="@(!_pagedResult.HasPreviousPage)">
+                    Previous
+                </button>
+                
+                <span class="page-info">
+                    Page @_pagedResult.PageNumber of @_pagedResult.TotalPages
+                </span>
+                
+                <button class="btn btn-secondary" 
+                        @onclick="NextPage" 
+                        disabled="@(!_pagedResult.HasNextPage)">
+                    Next
+                </button>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private EntryFilter _filter = new();
+    private PagedResult<JournalEntry> _pagedResult = new();
+    private List<Mood> _moods = new();
+    private List<Tag> _tags = new();
+    private List<string> _categories = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReferenceData();
+        await LoadEntries();
+    }
+    
+    private async Task LoadReferenceData()
+    {
+        _moods = await Repository.GetAllMoodsAsync();
+        _tags = await Repository.GetAllTagsAsync();
+        _categories = await Repository.GetAllCategoriesAsync();
+    }
+    
+    private async Task LoadEntries()
+    {
+        _isLoading = true;
+        StateHasChanged();
+        
+        try
+        {
+            _pagedResult = await Repository.GetEntriesAsync(_filter);
+        }
+        finally
+        {
+            _isLoading = false;
+            StateHasChanged();
+        }
+    }
+    
+    private async Task HandleFilterChanged(EntryFilter filter)
+    {
+        _filter = filter;
+        _filter.PageNumber = 1;
+        await LoadEntries();
+    }
+    
+    private bool HasActiveFilters()
+    {
+        return !string.IsNullOrWhiteSpace(_filter.SearchText) ||
+               _filter.StartDate.HasValue ||
+               _filter.EndDate.HasValue ||
+               _filter.MoodIds?.Any() == true ||
+               _filter.TagIds?.Any() == true ||
+               !string.IsNullOrWhiteSpace(_filter.Category);
+    }
+    
+    private async Task ClearFilters()
+    {
+        _filter = new EntryFilter { PageSize = _filter.PageSize };
+        await LoadEntries();
+    }
+    
+    private async Task PreviousPage()
+    {
+        if (_pagedResult.HasPreviousPage)
+        {
+            _filter.PageNumber--;
+            await LoadEntries();
+        }
+    }
+    
+    private async Task NextPage()
+    {
+        if (_pagedResult.HasNextPage)
+        {
+            _filter.PageNumber++;
+            await LoadEntries();
+        }
+    }
+    
+    private void ViewEntry(JournalEntry entry)
+    {
+        Navigation.NavigateTo($"/calendar?date={entry.EntryDate:yyyy-MM-dd}");
+    }
+    
+    private void GoToToday()
+    {
+        Navigation.NavigateTo("/today");
+    }
+}

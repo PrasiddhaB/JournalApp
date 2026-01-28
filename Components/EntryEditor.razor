@@ -1,0 +1,178 @@
+@namespace JournalApp.Components
+
+<div class="entry-editor">
+    <!-- Formatting Toolbar -->
+    <div class="editor-toolbar">
+        <button type="button" class="toolbar-btn" @onclick="InsertBold" title="Bold">
+            <strong>B</strong>
+        </button>
+        <button type="button" class="toolbar-btn" @onclick="InsertItalic" title="Italic">
+            <em>I</em>
+        </button>
+        <button type="button" class="toolbar-btn" @onclick="InsertHeading" title="Heading">
+            H
+        </button>
+        <button type="button" class="toolbar-btn" @onclick="InsertBullet" title="Bullet List">
+            •
+        </button>
+        <button type="button" class="toolbar-btn" @onclick="InsertNumbered" title="Numbered List">
+            1.
+        </button>
+        <button type="button" class="toolbar-btn" @onclick="InsertQuote" title="Quote">
+            "
+        </button>
+        <span class="toolbar-divider"></span>
+        <button type="button" class="toolbar-btn @(_showPreview ? "active" : "")" @onclick="TogglePreview" title="Toggle Preview">
+            👁️
+        </button>
+    </div>
+
+    <div class="editor-content @(_showPreview ? "with-preview" : "")">
+        <!-- Editor Pane -->
+        <div class="editor-pane">
+            <textarea @ref="_textareaRef"
+                      value="@_content"
+                      @oninput="HandleInput"
+                      placeholder="Write your thoughts here... (Markdown supported)"
+                      class="editor-textarea"
+                      rows="15"></textarea>
+        </div>
+
+        <!-- Preview Pane -->
+        @if (_showPreview)
+        {
+            <div class="preview-pane">
+                <div class="preview-label">Preview</div>
+                <div class="preview-content">
+                    @((MarkupString)RenderMarkdown(_content))
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="editor-footer">
+        <span class="editor-hint">
+            Tip: Use **bold**, *italic*, # heading, - bullets
+        </span>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Content { get; set; } = "";
+
+    [Parameter]
+    public EventCallback<string> OnContentChanged { get; set; }
+
+    private string _content = "";
+    private bool _showPreview = false;
+    private ElementReference _textareaRef;
+
+    protected override void OnParametersSet()
+    {
+        _content = Content;
+    }
+
+    private async Task HandleInput(ChangeEventArgs e)
+    {
+        _content = e.Value?.ToString() ?? "";
+        await OnContentChanged.InvokeAsync(_content);
+    }
+
+    private void TogglePreview()
+    {
+        _showPreview = !_showPreview;
+    }
+
+    // Toolbar button handlers
+    private async Task InsertBold()
+    {
+        _content += "**";
+        await OnContentChanged.InvokeAsync(_content);
+    }
+
+    private async Task InsertItalic()
+    {
+        _content += "*";
+        await OnContentChanged.InvokeAsync(_content);
+    }
+
+    private async Task InsertHeading()
+    {
+        _content += "# ";
+        await OnContentChanged.InvokeAsync(_content);
+    }
+
+    private async Task InsertBullet()
+    {
+        _content += "- ";
+        await OnContentChanged.InvokeAsync(_content);
+    }
+
+    private async Task InsertNumbered()
+    {
+        _content += "1. ";
+        await OnContentChanged.InvokeAsync(_content);
+    }
+
+    private async Task InsertQuote()
+    {
+        _content += "> ";
+        await OnContentChanged.InvokeAsync(_content);
+    }
+
+    private string RenderMarkdown(string markdown)
+    {
+        if (string.IsNullOrEmpty(markdown))
+            return "<p class='preview-empty'>Start writing to see preview...</p>";
+
+        var html = markdown;
+
+        // Process line by line for block elements
+        var lines = html.Split('\n');
+        var processedLines = new List<string>();
+
+        foreach (var line in lines)
+        {
+            var processed = line;
+
+            // Headers
+            if (processed.StartsWith("### "))
+                processed = $"<h3>{processed.Substring(4)}</h3>";
+            else if (processed.StartsWith("## "))
+                processed = $"<h2>{processed.Substring(3)}</h2>";
+            else if (processed.StartsWith("# "))
+                processed = $"<h1>{processed.Substring(2)}</h1>";
+            // Quotes
+            else if (processed.StartsWith("> "))
+                processed = $"<blockquote>{processed.Substring(2)}</blockquote>";
+            // Bullet lists
+            else if (processed.StartsWith("- ") || processed.StartsWith("* "))
+                processed = $"<li>{processed.Substring(2)}</li>";
+            // Numbered lists
+            else if (System.Text.RegularExpressions.Regex.IsMatch(processed, @"^\d+\.\s"))
+                processed = $"<li>{System.Text.RegularExpressions.Regex.Replace(processed, @"^\d+\.\s", "")}</li>";
+            else if (!string.IsNullOrWhiteSpace(processed))
+                processed = $"<p>{processed}</p>";
+            else
+                processed = "<br/>";
+
+            processedLines.Add(processed);
+        }
+
+        html = string.Join("", processedLines);
+
+        // Inline formatting
+        // Bold
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+        // Italic
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"\*(.+?)\*", "<em>$1</em>");
+        // Code
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"`(.+?)`", "<code>$1</code>");
+
+        // Wrap consecutive <li> elements in <ul>
+        html = System.Text.RegularExpressions.Regex.Replace(html, @"(<li>.*?</li>)+", "<ul>$0</ul>");
+
+        return html;
+    }
+}

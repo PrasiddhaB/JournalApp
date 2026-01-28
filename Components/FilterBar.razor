@@ -1,0 +1,254 @@
+@namespace JournalApp.Components
+@using JournalApp.Models
+
+<div class="filter-bar">
+    <!-- Search -->
+    <div class="filter-section search-section">
+        <div class="search-input-container">
+            <span class="search-icon">🔍</span>
+            <input type="text" 
+                   @bind="_searchText" 
+                   @bind:event="oninput"
+                   @onkeypress="HandleSearchKeyPress"
+                   placeholder="Search entries..."
+                   class="search-input" />
+            @if (!string.IsNullOrWhiteSpace(_searchText))
+            {
+                <button class="clear-btn" @onclick="ClearSearch">×</button>
+            }
+        </div>
+        <button class="btn btn-primary search-btn" @onclick="ApplyFilters">Search</button>
+    </div>
+    
+    <!-- Filter Toggle -->
+    <button class="filter-toggle" @onclick="ToggleFilters">
+        🎚️ Filters
+        @if (HasActiveFilters)
+        {
+            <span class="filter-count">@ActiveFilterCount</span>
+        }
+        <span class="toggle-icon">@(_showFilters ? "▲" : "▼")</span>
+    </button>
+    
+    <!-- Expanded Filters -->
+    @if (_showFilters)
+    {
+        <div class="filters-expanded">
+            <!-- Date Range -->
+            <div class="filter-group">
+                <label>Date Range</label>
+                <div class="date-inputs">
+                    <input type="date" 
+                           value="@Filter.StartDate?.ToString("yyyy-MM-dd")"
+                           @onchange="HandleStartDateChange"
+                           class="date-input" />
+                    <span>to</span>
+                    <input type="date" 
+                           value="@Filter.EndDate?.ToString("yyyy-MM-dd")"
+                           @onchange="HandleEndDateChange"
+                           class="date-input" />
+                </div>
+            </div>
+            
+            <!-- Mood Filter -->
+            <div class="filter-group">
+                <label>Moods</label>
+                <div class="mood-filter-options">
+                    @foreach (var category in Enum.GetValues<MoodCategory>())
+                    {
+                        <div class="mood-category-group">
+                            <span class="category-name @category.ToString().ToLower()">@category</span>
+                            <div class="mood-checkboxes">
+                                @foreach (var mood in Moods.Where(m => m.Category == category))
+                                {
+                                    <label class="mood-checkbox">
+                                        <input type="checkbox" 
+                                               checked="@IsMoodSelected(mood.Id)"
+                                               @onchange="() => ToggleMood(mood.Id)" />
+                                        <span>@mood.Emoji @mood.Name</span>
+                                    </label>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+            
+            <!-- Tag Filter -->
+            <div class="filter-group">
+                <label>Tags</label>
+                <div class="tag-filter-options">
+                    @foreach (var tag in Tags.Take(20))
+                    {
+                        <label class="tag-checkbox">
+                            <input type="checkbox" 
+                                   checked="@IsTagSelected(tag.Id)"
+                                   @onchange="() => ToggleTag(tag.Id)" />
+                            <span style="color: @tag.Color">@tag.Name</span>
+                        </label>
+                    }
+                </div>
+            </div>
+            
+            <!-- Category Filter -->
+            @if (Categories.Any())
+            {
+                <div class="filter-group">
+                    <label>Category</label>
+                    <select @bind="_selectedCategory" class="category-select">
+                        <option value="">All Categories</option>
+                        @foreach (var category in Categories)
+                        {
+                            <option value="@category">@category</option>
+                        }
+                    </select>
+                </div>
+            }
+            
+            <!-- Filter Actions -->
+            <div class="filter-actions">
+                <button class="btn btn-primary" @onclick="ApplyFilters">Apply Filters</button>
+                <button class="btn btn-secondary" @onclick="ClearAllFilters">Clear All</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public List<Mood> Moods { get; set; } = new();
+    
+    [Parameter]
+    public List<Tag> Tags { get; set; } = new();
+    
+    [Parameter]
+    public List<string> Categories { get; set; } = new();
+    
+    [Parameter]
+    public EntryFilter Filter { get; set; } = new();
+    
+    [Parameter]
+    public EventCallback<EntryFilter> OnFilterChanged { get; set; }
+    
+    private bool _showFilters = false;
+    private string _searchText = "";
+    private List<int> _selectedMoodIds = new();
+    private List<int> _selectedTagIds = new();
+    private string _selectedCategory = "";
+    private DateOnly? _startDate;
+    private DateOnly? _endDate;
+    
+    protected override void OnParametersSet()
+    {
+        _searchText = Filter.SearchText ?? "";
+        _selectedMoodIds = Filter.MoodIds ?? new();
+        _selectedTagIds = Filter.TagIds ?? new();
+        _selectedCategory = Filter.Category ?? "";
+        _startDate = Filter.StartDate;
+        _endDate = Filter.EndDate;
+    }
+    
+    private bool HasActiveFilters => 
+        !string.IsNullOrWhiteSpace(_searchText) ||
+        _startDate.HasValue ||
+        _endDate.HasValue ||
+        _selectedMoodIds.Any() ||
+        _selectedTagIds.Any() ||
+        !string.IsNullOrWhiteSpace(_selectedCategory);
+    
+    private int ActiveFilterCount
+    {
+        get
+        {
+            var count = 0;
+            if (!string.IsNullOrWhiteSpace(_searchText)) count++;
+            if (_startDate.HasValue || _endDate.HasValue) count++;
+            count += _selectedMoodIds.Count;
+            count += _selectedTagIds.Count;
+            if (!string.IsNullOrWhiteSpace(_selectedCategory)) count++;
+            return count;
+        }
+    }
+    
+    private void ToggleFilters()
+    {
+        _showFilters = !_showFilters;
+    }
+    
+    private bool IsMoodSelected(int moodId) => _selectedMoodIds.Contains(moodId);
+    private bool IsTagSelected(int tagId) => _selectedTagIds.Contains(tagId);
+    
+    private void ToggleMood(int moodId)
+    {
+        if (_selectedMoodIds.Contains(moodId))
+            _selectedMoodIds.Remove(moodId);
+        else
+            _selectedMoodIds.Add(moodId);
+    }
+    
+    private void ToggleTag(int tagId)
+    {
+        if (_selectedTagIds.Contains(tagId))
+            _selectedTagIds.Remove(tagId);
+        else
+            _selectedTagIds.Add(tagId);
+    }
+    
+    private void HandleStartDateChange(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var date))
+            _startDate = date;
+        else
+            _startDate = null;
+    }
+    
+    private void HandleEndDateChange(ChangeEventArgs e)
+    {
+        if (DateOnly.TryParse(e.Value?.ToString(), out var date))
+            _endDate = date;
+        else
+            _endDate = null;
+    }
+    
+    private async Task HandleSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ApplyFilters();
+        }
+    }
+    
+    private void ClearSearch()
+    {
+        _searchText = "";
+    }
+    
+    private async Task ApplyFilters()
+    {
+        var filter = new EntryFilter
+        {
+            SearchText = string.IsNullOrWhiteSpace(_searchText) ? null : _searchText,
+            StartDate = _startDate,
+            EndDate = _endDate,
+            MoodIds = _selectedMoodIds.Any() ? _selectedMoodIds.ToList() : null,
+            TagIds = _selectedTagIds.Any() ? _selectedTagIds.ToList() : null,
+            Category = string.IsNullOrWhiteSpace(_selectedCategory) ? null : _selectedCategory,
+            PageNumber = 1,
+            PageSize = Filter.PageSize
+        };
+        
+        await OnFilterChanged.InvokeAsync(filter);
+    }
+    
+    private async Task ClearAllFilters()
+    {
+        _searchText = "";
+        _startDate = null;
+        _endDate = null;
+        _selectedMoodIds = new();
+        _selectedTagIds = new();
+        _selectedCategory = "";
+        
+        await ApplyFilters();
+    }
+}

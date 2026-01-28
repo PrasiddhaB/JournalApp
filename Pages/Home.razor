@@ -1,0 +1,193 @@
+@page "/"
+@using JournalApp.Models
+@using JournalApp.Repositories
+@using JournalApp.Services
+@inject IJournalRepository Repository
+@inject StreakService StreakService
+@inject NavigationManager Navigation
+
+<div class="page home-page">
+    <header class="page-header">
+        <h1>Welcome Back</h1>
+        <p class="date-display">@DateTime.Now.ToString("dddd, MMMM d, yyyy")</p>
+    </header>
+    
+    @if (_isLoading)
+    {
+        <div class="loading-state">
+            <p>Loading your journal...</p>
+        </div>
+    }
+    else
+    {
+        <!-- Quick Stats Cards -->
+        <div class="stats-grid">
+            <div class="stat-card streak-card">
+                <div class="stat-content">
+                    <span class="stat-value">@_streakData.CurrentStreak</span>
+                    <span class="stat-label">Day Streak</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-content">
+                    <span class="stat-value">@_streakData.LongestStreak</span>
+                    <span class="stat-label">Best Streak</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-content">
+                    <span class="stat-value">@_totalEntries</span>
+                    <span class="stat-label">Total Entries</span>
+                </div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-content">
+                    <span class="stat-value">@(_streakData.MissedDays.Count)</span>
+                    <span class="stat-label">Missed (30d)</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Today's Entry Status -->
+        <section class="today-section">
+            <h2>Today's Entry</h2>
+            
+            @if (_todayEntry != null)
+            {
+                <div class="entry-preview">
+                    <div class="entry-header">
+                        <h3>@_todayEntry.Title</h3>
+                        @if (_todayEntry.PrimaryMood != null)
+                        {
+                            <span class="mood-badge @_todayEntry.PrimaryMood.Category.ToString().ToLower()">
+                                @_todayEntry.PrimaryMood.Name
+                            </span>
+                        }
+                    </div>
+                    <p class="entry-excerpt">@GetExcerpt(_todayEntry.Content)</p>
+                    <div class="entry-meta">
+                        <span>@_todayEntry.WordCount words</span>
+                        <span>•</span>
+                        <span>Last updated @_todayEntry.UpdatedAt.ToString("h:mm tt")</span>
+                    </div>
+                    <button class="btn btn-primary" @onclick="EditToday">
+                        Edit Entry
+                    </button>
+                </div>
+            }
+            else
+            {
+                <div class="no-entry">
+                    <p class="no-entry-text">You haven't written today's entry yet.</p>
+                    <button class="btn btn-primary btn-lg" @onclick="StartWriting">
+                        Start Writing
+                    </button>
+                </div>
+            }
+        </section>
+        
+        <!-- Recent Entries -->
+        <section class="recent-section">
+            <div class="section-header">
+                <h2>Recent Entries</h2>
+                <a href="/timeline" class="view-all-link">View All</a>
+            </div>
+            
+            @if (_recentEntries.Any())
+            {
+                <div class="entries-list">
+                    @foreach (var entry in _recentEntries)
+                    {
+                        <div class="entry-card" @onclick="() => ViewEntry(entry.EntryDate)">
+                            <div class="entry-date">
+                                <span class="day">@entry.EntryDate.Day</span>
+                                <span class="month">@entry.EntryDate.ToString("MMM")</span>
+                            </div>
+                            <div class="entry-info">
+                                <h4>@entry.Title</h4>
+                                <p>@GetExcerpt(entry.Content, 80)</p>
+                                <div class="entry-tags">
+                                    @if (entry.PrimaryMood != null)
+                                    {
+                                        <span class="tag mood">@entry.PrimaryMood.Name</span>
+                                    }
+                                    @foreach (var et in entry.EntryTags.Take(3))
+                                    {
+                                        <span class="tag">@et.Tag?.Name</span>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <p class="no-entries">No recent entries. Start journaling today!</p>
+            }
+        </section>
+    }
+</div>
+
+@code {
+    private bool _isLoading = true;
+    private StreakData _streakData = new();
+    private int _totalEntries = 0;
+    private JournalEntry? _todayEntry;
+    private List<JournalEntry> _recentEntries = new();
+    
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+    }
+    
+    private async Task LoadDataAsync()
+    {
+        _isLoading = true;
+        
+        try
+        {
+            _streakData = await StreakService.GetStreakDataAsync();
+            _todayEntry = await Repository.GetTodayEntryAsync();
+            
+            var filter = new EntryFilter 
+            { 
+                PageNumber = 1, 
+                PageSize = 5,
+                EndDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-1))
+            };
+            var result = await Repository.GetEntriesAsync(filter);
+            _recentEntries = result.Items;
+            _totalEntries = result.TotalCount + (_todayEntry != null ? 1 : 0);
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+    
+    private string GetExcerpt(string content, int maxLength = 150)
+    {
+        if (string.IsNullOrEmpty(content)) return "";
+        if (content.Length <= maxLength) return content;
+        return content.Substring(0, maxLength).TrimEnd() + "...";
+    }
+    
+    private void StartWriting()
+    {
+        Navigation.NavigateTo("/today");
+    }
+    
+    private void EditToday()
+    {
+        Navigation.NavigateTo("/today");
+    }
+    
+    private void ViewEntry(DateOnly date)
+    {
+        Navigation.NavigateTo($"/calendar?date={date:yyyy-MM-dd}");
+    }
+}

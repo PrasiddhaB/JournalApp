@@ -1,0 +1,303 @@
+@page "/calendar"
+@using JournalApp.Models
+@using JournalApp.Repositories
+@inject IJournalRepository Repository
+@inject NavigationManager Navigation
+
+<div class="page calendar-page">
+    <header class="page-header">
+        <h1>Calendar</h1>
+        <p class="page-subtitle">Navigate through your journal entries</p>
+    </header>
+    
+    <div class="calendar-container">
+        <!-- Calendar Navigation -->
+        <div class="calendar-nav">
+            <button class="nav-btn" @onclick="PreviousMonth">Previous</button>
+            <h2>@_currentDate.ToString("MMMM yyyy")</h2>
+            <button class="nav-btn" @onclick="NextMonth">Next</button>
+        </div>
+        
+        <!-- Calendar Grid -->
+        <div class="calendar-grid">
+            <!-- Day Headers -->
+            <div class="calendar-header">
+                @foreach (var day in new[] { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" })
+                {
+                    <div class="day-header">@day</div>
+                }
+            </div>
+            
+            <!-- Calendar Days -->
+            <div class="calendar-days">
+                @foreach (var day in _calendarDays)
+                {
+                    <div class="calendar-day @GetDayClasses(day)" @onclick="() => SelectDate(day)">
+                        <span class="day-number">@day.Day</span>
+                    </div>
+                }
+            </div>
+        </div>
+        
+        <!-- Jump to Date -->
+        <div class="jump-to-date">
+            <label>Jump to:</label>
+            <input type="month" 
+                   value="@_currentDate.ToString("yyyy-MM")" 
+                   @onchange="HandleMonthChange" />
+            <button class="btn btn-secondary" @onclick="GoToToday">Today</button>
+        </div>
+    </div>
+    
+    <!-- Selected Entry Preview -->
+    <div class="entry-preview-section">
+        @if (_selectedEntry != null)
+        {
+            <div class="selected-entry">
+                <div class="entry-header">
+                    <h3>@_selectedDate?.ToString("dddd, MMMM d, yyyy")</h3>
+                    <button class="btn btn-primary btn-sm" @onclick="EditSelectedEntry">
+                        Edit Entry
+                    </button>
+                </div>
+                
+                <div class="entry-content">
+                    <h4>@_selectedEntry.Title</h4>
+                    
+                    <div class="entry-moods">
+                        @if (_selectedEntry.PrimaryMood != null)
+                        {
+                            <span class="mood-badge primary @_selectedEntry.PrimaryMood.Category.ToString().ToLower()">
+                                @_selectedEntry.PrimaryMood.Name
+                            </span>
+                        }
+                        @if (_selectedEntry.SecondaryMood1 != null)
+                        {
+                            <span class="mood-badge secondary">
+                                @_selectedEntry.SecondaryMood1.Name
+                            </span>
+                        }
+                        @if (_selectedEntry.SecondaryMood2 != null)
+                        {
+                            <span class="mood-badge secondary">
+                                @_selectedEntry.SecondaryMood2.Name
+                            </span>
+                        }
+                    </div>
+                    
+                    <div class="entry-text">
+                        @((MarkupString)FormatContent(_selectedEntry.Content))
+                    </div>
+                    
+                    @if (_selectedEntry.EntryTags.Any())
+                    {
+                        <div class="entry-tags">
+                            @foreach (var et in _selectedEntry.EntryTags)
+                            {
+                                <span class="tag" style="background-color: @(et.Tag?.Color ?? "#6B7280")20; border-color: @(et.Tag?.Color ?? "#6B7280")">
+                                    @et.Tag?.Name
+                                </span>
+                            }
+                        </div>
+                    }
+                    
+                    <div class="entry-meta">
+                        <span>@_selectedEntry.WordCount words</span>
+                        @if (!string.IsNullOrEmpty(_selectedEntry.Category))
+                        {
+                            <span>• @_selectedEntry.Category</span>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+        else if (_selectedDate != null)
+        {
+            <div class="no-entry-selected">
+                <p>No entry for @_selectedDate?.ToString("MMMM d, yyyy")</p>
+                @if (_selectedDate?.ToDateTime(TimeOnly.MinValue) <= DateTime.Today)
+                {
+                    <button class="btn btn-primary" @onclick="CreateEntryForDate">
+                        Create Entry
+                    </button>
+                }
+            </div>
+        }
+        else
+        {
+            <div class="no-selection">
+                <p>Select a date to view its entry</p>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private DateTime _currentDate = DateTime.Today;
+    private List<DateOnly> _calendarDays = new();
+    private HashSet<DateOnly> _datesWithEntries = new();
+    
+    private DateOnly? _selectedDate;
+    private JournalEntry? _selectedEntry;
+    
+    [SupplyParameterFromQuery]
+    public string? Date { get; set; }
+    
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrEmpty(Date) && DateOnly.TryParse(Date, out var date))
+        {
+            _currentDate = date.ToDateTime(TimeOnly.MinValue);
+            _selectedDate = date;
+        }
+        
+        await LoadCalendarData();
+        
+        if (_selectedDate != null)
+        {
+            await LoadSelectedEntry();
+        }
+    }
+    
+    private async Task LoadCalendarData()
+    {
+        GenerateCalendarDays();
+        
+        var entriesForMonth = await Repository.GetDatesWithEntriesAsync(_currentDate.Year, _currentDate.Month);
+        _datesWithEntries = new HashSet<DateOnly>(entriesForMonth);
+    }
+    
+    private void GenerateCalendarDays()
+    {
+        _calendarDays.Clear();
+        
+        var firstOfMonth = new DateTime(_currentDate.Year, _currentDate.Month, 1);
+        var daysInMonth = DateTime.DaysInMonth(_currentDate.Year, _currentDate.Month);
+        
+        var startDayOfWeek = (int)firstOfMonth.DayOfWeek;
+        for (int i = startDayOfWeek - 1; i >= 0; i--)
+        {
+            _calendarDays.Add(DateOnly.FromDateTime(firstOfMonth.AddDays(-i - 1)));
+        }
+        
+        for (int day = 1; day <= daysInMonth; day++)
+        {
+            _calendarDays.Add(new DateOnly(_currentDate.Year, _currentDate.Month, day));
+        }
+        
+        var remainingDays = 42 - _calendarDays.Count;
+        var lastOfMonth = new DateTime(_currentDate.Year, _currentDate.Month, daysInMonth);
+        for (int i = 1; i <= remainingDays; i++)
+        {
+            _calendarDays.Add(DateOnly.FromDateTime(lastOfMonth.AddDays(i)));
+        }
+    }
+    
+    private async Task SelectDate(DateOnly date)
+    {
+        _selectedDate = date;
+        await LoadSelectedEntry();
+        
+        if (date.Month != _currentDate.Month || date.Year != _currentDate.Year)
+        {
+            _currentDate = date.ToDateTime(TimeOnly.MinValue);
+            await LoadCalendarData();
+        }
+    }
+    
+    private async Task LoadSelectedEntry()
+    {
+        if (_selectedDate == null) return;
+        _selectedEntry = await Repository.GetByDateAsync(_selectedDate.Value);
+    }
+    
+    private async Task PreviousMonth()
+    {
+        _currentDate = _currentDate.AddMonths(-1);
+        await LoadCalendarData();
+    }
+    
+    private async Task NextMonth()
+    {
+        _currentDate = _currentDate.AddMonths(1);
+        await LoadCalendarData();
+    }
+    
+    private async Task GoToToday()
+    {
+        _currentDate = DateTime.Today;
+        _selectedDate = DateOnly.FromDateTime(DateTime.Today);
+        await LoadCalendarData();
+        await LoadSelectedEntry();
+    }
+    
+    private async Task HandleMonthChange(ChangeEventArgs e)
+    {
+        if (DateTime.TryParse(e.Value?.ToString() + "-01", out var date))
+        {
+            _currentDate = date;
+            await LoadCalendarData();
+        }
+    }
+    
+    private string GetDayClasses(DateOnly day)
+    {
+        var classes = new List<string>();
+        
+        if (day.Month != _currentDate.Month)
+            classes.Add("other-month");
+        
+        if (day == DateOnly.FromDateTime(DateTime.Today))
+            classes.Add("today");
+        
+        if (day == _selectedDate)
+            classes.Add("selected");
+        
+        if (_datesWithEntries.Contains(day))
+            classes.Add("has-entry");
+        
+        if (day.ToDateTime(TimeOnly.MinValue) > DateTime.Today)
+            classes.Add("future");
+        
+        return string.Join(" ", classes);
+    }
+    
+    private void EditSelectedEntry()
+    {
+        if (_selectedDate?.ToDateTime(TimeOnly.MinValue) == DateTime.Today)
+        {
+            Navigation.NavigateTo("/today");
+        }
+        else
+        {
+            Navigation.NavigateTo($"/entry/{_selectedDate:yyyy-MM-dd}");
+        }
+    }
+    
+    private void CreateEntryForDate()
+    {
+        if (_selectedDate?.ToDateTime(TimeOnly.MinValue) == DateTime.Today)
+        {
+            Navigation.NavigateTo("/today");
+        }
+        else
+        {
+            Navigation.NavigateTo($"/entry/{_selectedDate:yyyy-MM-dd}");
+        }
+    }
+    
+    private string FormatContent(string content)
+    {
+        if (string.IsNullOrEmpty(content)) return "";
+        
+        var lines = content.Split('\n');
+        var formatted = string.Join("<br/>", lines.Select(line =>
+        {
+            line = System.Text.RegularExpressions.Regex.Replace(line, @"\*\*(.+?)\*\*", "<strong>$1</strong>");
+            line = System.Text.RegularExpressions.Regex.Replace(line, @"\*(.+?)\*", "<em>$1</em>");
+            return line;
+        }));
+        
+        return formatted;
+    }
+}

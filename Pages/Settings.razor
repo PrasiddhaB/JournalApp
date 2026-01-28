@@ -1,0 +1,371 @@
+@page "/settings"
+@using JournalApp.Services
+@using JournalApp.Data
+@inject AuthService AuthService
+@inject ThemeService ThemeService
+@inject ExportPdfService ExportService
+
+<div class="page settings-page">
+    <header class="page-header">
+        <h1>Settings</h1>
+        <p class="page-subtitle">Customize your journal experience</p>
+    </header>
+    
+    <div class="settings-container">
+        <!-- Security Settings -->
+        <section class="settings-section">
+            <h2>Security</h2>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <h3>PIN Protection</h3>
+                    <p>Require a PIN to access your journal</p>
+                </div>
+                <div class="setting-control">
+                    @if (_hasPassword)
+                    {
+                        <span class="status enabled">Enabled</span>
+                    }
+                    else
+                    {
+                        <span class="status disabled">Disabled</span>
+                    }
+                </div>
+            </div>
+            
+            @if (!_hasPassword)
+            {
+                <!-- Set New PIN -->
+                <div class="setting-form">
+                    <h4>Set a PIN</h4>
+                    <div class="form-row">
+                        <input type="password" 
+                               @bind="_newPin" 
+                               placeholder="Enter new PIN" 
+                               maxlength="20"
+                               class="form-input" />
+                    </div>
+                    <div class="form-row">
+                        <input type="password" 
+                               @bind="_confirmPin" 
+                               placeholder="Confirm PIN" 
+                               maxlength="20"
+                               class="form-input" />
+                    </div>
+                    <button class="btn btn-primary" @onclick="SetPin">
+                        Set PIN
+                    </button>
+                </div>
+            }
+            else
+            {
+                <!-- Change/Remove PIN -->
+                <div class="setting-form">
+                    <h4>Change or Remove PIN</h4>
+                    <div class="form-row">
+                        <input type="password" 
+                               @bind="_currentPin" 
+                               placeholder="Current PIN" 
+                               maxlength="20"
+                               class="form-input" />
+                    </div>
+                    <div class="form-row">
+                        <input type="password" 
+                               @bind="_newPin" 
+                               placeholder="New PIN (leave empty to remove)" 
+                               maxlength="20"
+                               class="form-input" />
+                    </div>
+                    @if (!string.IsNullOrEmpty(_newPin))
+                    {
+                        <div class="form-row">
+                            <input type="password" 
+                                   @bind="_confirmPin" 
+                                   placeholder="Confirm new PIN" 
+                                   maxlength="20"
+                                   class="form-input" />
+                        </div>
+                    }
+                    <div class="button-group">
+                        <button class="btn btn-primary" @onclick="ChangePin">
+                            @(string.IsNullOrEmpty(_newPin) ? "Remove PIN" : "Change PIN")
+                        </button>
+                    </div>
+                </div>
+            }
+            
+            @if (!string.IsNullOrEmpty(_securityMessage))
+            {
+                <div class="message @(_securityError ? "error" : "success")">
+                    @_securityMessage
+                </div>
+            }
+        </section>
+        
+        <!-- Appearance Settings -->
+        <section class="settings-section">
+            <h2>Appearance</h2>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <h3>Theme</h3>
+                    <p>Choose your preferred color scheme</p>
+                </div>
+                <div class="setting-control">
+                    <button class="theme-btn @(ThemeService.IsDarkMode ? "" : "active")" 
+                            @onclick="() => SetTheme(false)">
+                        Light
+                    </button>
+                    <button class="theme-btn @(ThemeService.IsDarkMode ? "active" : "")" 
+                            @onclick="() => SetTheme(true)">
+                        Dark
+                    </button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- Export Settings -->
+        <section class="settings-section">
+            <h2>Export</h2>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <h3>Export to PDF</h3>
+                    <p>Download your journal entries as a PDF document</p>
+                </div>
+            </div>
+            
+            <div class="setting-form export-form">
+                <div class="form-row inline">
+                    <div class="form-group">
+                        <label>From:</label>
+                        <input type="date" @bind="_exportStartDate" class="form-input" />
+                    </div>
+                    <div class="form-group">
+                        <label>To:</label>
+                        <input type="date" @bind="_exportEndDate" class="form-input" />
+                    </div>
+                </div>
+                <div class="button-group">
+                    <button class="btn btn-primary" @onclick="ExportPdf" disabled="@_isExporting">
+                        @if (_isExporting)
+                        {
+                            <span>Exporting...</span>
+                        }
+                        else
+                        {
+                            <span>Export PDF</span>
+                        }
+                    </button>
+                    <button class="btn btn-secondary" @onclick="OpenExportsFolder">
+                        Open Exports Folder
+                    </button>
+                </div>
+                
+                @if (!string.IsNullOrEmpty(_exportMessage))
+                {
+                    <div class="message @(_exportError ? "error" : "success")">
+                        @_exportMessage
+                    </div>
+                }
+            </div>
+        </section>
+        
+        <!-- Data Location -->
+        <section class="settings-section">
+            <h2>Data Storage</h2>
+            
+            <div class="setting-item">
+                <div class="setting-info">
+                    <h3>Database Location</h3>
+                    <p class="data-path">@_databasePath</p>
+                </div>
+                <div class="setting-control">
+                    <button class="btn btn-secondary btn-sm" @onclick="OpenDataFolder">
+                        Open Folder
+                    </button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- About -->
+        <section class="settings-section">
+            <h2>About</h2>
+            
+            <div class="about-info">
+                <p><strong>Personal Journal</strong></p>
+                <p>Version 1.0</p>
+                <p>A secure, feature-rich journaling application built with .NET MAUI Blazor Hybrid</p>
+                <p class="small">All data is stored locally on your device.</p>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private bool _hasPassword;
+    private string _currentPin = "";
+    private string _newPin = "";
+    private string _confirmPin = "";
+    private string _securityMessage = "";
+    private bool _securityError = false;
+    
+    private DateTime _exportStartDate = DateTime.Today.AddMonths(-1);
+    private DateTime _exportEndDate = DateTime.Today;
+    private bool _isExporting = false;
+    private string _exportMessage = "";
+    private bool _exportError = false;
+    
+    private string _databasePath = "";
+    
+    protected override async Task OnInitializedAsync()
+    {
+        _hasPassword = await AuthService.IsPasswordEnabledAsync();
+        _databasePath = DbPathHelper.GetDatabasePath();
+    }
+    
+    private async Task SetPin()
+    {
+        _securityMessage = "";
+        
+        if (string.IsNullOrWhiteSpace(_newPin))
+        {
+            ShowSecurityMessage("Please enter a PIN", true);
+            return;
+        }
+        
+        if (_newPin.Length < 4)
+        {
+            ShowSecurityMessage("PIN must be at least 4 characters", true);
+            return;
+        }
+        
+        if (_newPin != _confirmPin)
+        {
+            ShowSecurityMessage("PINs do not match", true);
+            return;
+        }
+        
+        await AuthService.SetPasswordAsync(_newPin);
+        _hasPassword = true;
+        ClearPinFields();
+        ShowSecurityMessage("PIN set successfully!", false);
+    }
+    
+    private async Task ChangePin()
+    {
+        _securityMessage = "";
+        
+        if (string.IsNullOrWhiteSpace(_currentPin))
+        {
+            ShowSecurityMessage("Please enter your current PIN", true);
+            return;
+        }
+        
+        if (string.IsNullOrEmpty(_newPin))
+        {
+            var success = await AuthService.RemovePasswordAsync(_currentPin);
+            if (success)
+            {
+                _hasPassword = false;
+                ClearPinFields();
+                ShowSecurityMessage("PIN removed successfully!", false);
+            }
+            else
+            {
+                ShowSecurityMessage("Current PIN is incorrect", true);
+            }
+        }
+        else
+        {
+            if (_newPin.Length < 4)
+            {
+                ShowSecurityMessage("New PIN must be at least 4 characters", true);
+                return;
+            }
+            
+            if (_newPin != _confirmPin)
+            {
+                ShowSecurityMessage("New PINs do not match", true);
+                return;
+            }
+            
+            var success = await AuthService.ChangePasswordAsync(_currentPin, _newPin);
+            if (success)
+            {
+                ClearPinFields();
+                ShowSecurityMessage("PIN changed successfully!", false);
+            }
+            else
+            {
+                ShowSecurityMessage("Current PIN is incorrect", true);
+            }
+        }
+    }
+    
+    private void ClearPinFields()
+    {
+        _currentPin = "";
+        _newPin = "";
+        _confirmPin = "";
+    }
+    
+    private void ShowSecurityMessage(string message, bool isError)
+    {
+        _securityMessage = message;
+        _securityError = isError;
+    }
+    
+    private async Task SetTheme(bool isDark)
+    {
+        await ThemeService.SetThemeAsync(isDark ? "dark" : "light");
+    }
+    
+    private async Task ExportPdf()
+    {
+        _exportMessage = "";
+        _isExporting = true;
+        StateHasChanged();
+        
+        try
+        {
+            var startDate = DateOnly.FromDateTime(_exportStartDate);
+            var endDate = DateOnly.FromDateTime(_exportEndDate);
+            
+            if (startDate > endDate)
+            {
+                ShowExportMessage("Start date must be before end date", true);
+                return;
+            }
+            
+            var filePath = await ExportService.ExportToPdfAsync(startDate, endDate);
+            ShowExportMessage($"Exported successfully to:\n{filePath}", false);
+        }
+        catch (Exception ex)
+        {
+            ShowExportMessage($"Export failed: {ex.Message}", true);
+        }
+        finally
+        {
+            _isExporting = false;
+            StateHasChanged();
+        }
+    }
+    
+    private void OpenExportsFolder()
+    {
+        ExportService.OpenExportsFolder();
+    }
+    
+    private void OpenDataFolder()
+    {
+        var folder = DbPathHelper.GetAppDataFolder();
+        System.Diagnostics.Process.Start("explorer.exe", folder);
+    }
+    
+    private void ShowExportMessage(string message, bool isError)
+    {
+        _exportMessage = message;
+        _exportError = isError;
+    }
+}

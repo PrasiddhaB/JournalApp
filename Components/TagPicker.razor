@@ -1,0 +1,154 @@
+@namespace JournalApp.Components
+@using JournalApp.Models
+
+<div class="tag-picker">
+    <!-- Search/Create -->
+    <div class="tag-search">
+        <input type="text" 
+               @bind="_searchText" 
+               @bind:event="oninput"
+               placeholder="Search or create tag..."
+               class="tag-input" />
+        
+        @if (!string.IsNullOrWhiteSpace(_searchText) && !TagExists(_searchText))
+        {
+            <button type="button" class="create-tag-btn" @onclick="CreateTag">
+                + Create "@_searchText"
+            </button>
+        }
+    </div>
+    
+    <!-- Selected Tags -->
+    @if (SelectedTagIds.Any())
+    {
+        <div class="selected-tags">
+            <label>Selected:</label>
+            <div class="tag-chips">
+                @foreach (var tagId in SelectedTagIds)
+                {
+                    var tag = Tags.FirstOrDefault(t => t.Id == tagId);
+                    if (tag != null)
+                    {
+                        <span class="tag-chip selected" style="border-color: @tag.Color">
+                            @tag.Name
+                            <button type="button" class="remove-btn" @onclick="() => RemoveTag(tagId)">×</button>
+                        </span>
+                    }
+                }
+            </div>
+        </div>
+    }
+    
+    <!-- Available Tags -->
+    <div class="available-tags">
+        <!-- Pre-built Tags -->
+        <div class="tag-group">
+            <label class="tag-group-label">Pre-built Tags</label>
+            <div class="tag-list">
+                @foreach (var tag in FilteredPrebuiltTags)
+                {
+                    var isSelected = SelectedTagIds.Contains(tag.Id);
+                    <button type="button"
+                            class="tag-btn @(isSelected ? "selected" : "")"
+                            style="--tag-color: @tag.Color"
+                            @onclick="() => ToggleTag(tag.Id)">
+                        @tag.Name
+                        @if (isSelected)
+                        {
+                            <span class="check">✓</span>
+                        }
+                    </button>
+                }
+            </div>
+        </div>
+        
+        <!-- Custom Tags -->
+        @if (CustomTags.Any())
+        {
+            <div class="tag-group">
+                <label class="tag-group-label">Custom Tags</label>
+                <div class="tag-list">
+                    @foreach (var tag in FilteredCustomTags)
+                    {
+                        var isSelected = SelectedTagIds.Contains(tag.Id);
+                        <button type="button"
+                                class="tag-btn custom @(isSelected ? "selected" : "")"
+                                @onclick="() => ToggleTag(tag.Id)">
+                            @tag.Name
+                            @if (isSelected)
+                            {
+                                <span class="check">✓</span>
+                            }
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<Tag> Tags { get; set; } = new();
+    
+    [Parameter]
+    public List<int> SelectedTagIds { get; set; } = new();
+    
+    [Parameter]
+    public EventCallback<List<int>> OnTagsChanged { get; set; }
+    
+    [Parameter]
+    public EventCallback<string> OnCreateTag { get; set; }
+    
+    private string _searchText = "";
+    
+    private IEnumerable<Tag> PrebuiltTags => Tags.Where(t => t.IsPrebuilt);
+    private IEnumerable<Tag> CustomTags => Tags.Where(t => !t.IsPrebuilt);
+    
+    private IEnumerable<Tag> FilteredPrebuiltTags => string.IsNullOrWhiteSpace(_searchText)
+        ? PrebuiltTags
+        : PrebuiltTags.Where(t => t.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase));
+    
+    private IEnumerable<Tag> FilteredCustomTags => string.IsNullOrWhiteSpace(_searchText)
+        ? CustomTags
+        : CustomTags.Where(t => t.Name.Contains(_searchText, StringComparison.OrdinalIgnoreCase));
+    
+    private bool TagExists(string name)
+    {
+        return Tags.Any(t => t.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+    
+    private async Task ToggleTag(int tagId)
+    {
+        var newList = new List<int>(SelectedTagIds);
+        
+        if (newList.Contains(tagId))
+        {
+            newList.Remove(tagId);
+        }
+        else
+        {
+            newList.Add(tagId);
+        }
+        
+        SelectedTagIds = newList;
+        await OnTagsChanged.InvokeAsync(SelectedTagIds);
+    }
+    
+    private async Task RemoveTag(int tagId)
+    {
+        var newList = new List<int>(SelectedTagIds);
+        newList.Remove(tagId);
+        SelectedTagIds = newList;
+        await OnTagsChanged.InvokeAsync(SelectedTagIds);
+    }
+    
+    private async Task CreateTag()
+    {
+        if (string.IsNullOrWhiteSpace(_searchText)) return;
+        if (TagExists(_searchText)) return;
+        
+        await OnCreateTag.InvokeAsync(_searchText.Trim());
+        _searchText = "";
+    }
+}
